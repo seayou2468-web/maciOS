@@ -1,9 +1,9 @@
 import Foundation
 
-class ProcessManager {
+class ProcessManager: ObservableObject {
     static let shared = ProcessManager()
 
-    private var processes: [Int: String] = [:]
+    @Published var runningProcesses: [Int: String] = [:]
 
     func setupEnvironment() {
         let home = URL.documentsDirectory.path
@@ -14,7 +14,20 @@ class ProcessManager {
         setenv("DYLD_LIBRARY_PATH", (home as NSString).appendingPathComponent("macroot/usr/lib"), 1)
     }
 
-    func registerProcess(pid: Int, name: String) {
-        processes[pid] = name
+    func spawnTask(binaryPath: String, arguments: [String] = []) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            print("Spawning virtual task: \(binaryPath)")
+            let pid = Int.random(in: 1000...9999)
+
+            DispatchQueue.main.async {
+                self.runningProcesses[pid] = (binaryPath as NSString).lastPathComponent
+            }
+
+            MachOLoader.loadAndExecute(binaryPath: binaryPath, arguments: arguments)
+
+            DispatchQueue.main.async {
+                self.runningProcesses.removeValue(forKey: pid)
+            }
+        }
     }
 }

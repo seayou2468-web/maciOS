@@ -13,6 +13,7 @@ import UIKit
 @main
 struct maciOSApp: App {
     @StateObject private var mouse = MouseTracker.shared
+    @StateObject private var processManager = ProcessManager.shared
     @State var cursor = UIImage()
     
     var body: some Scene {
@@ -38,7 +39,7 @@ struct maciOSApp: App {
                     }
                 }
                 .onAppear {
-                    ProcessManager.shared.setupEnvironment()
+                    processManager.setupEnvironment()
 
                     // Setup macroot structure
                     let macroot = URL.documentsDirectory.appendingPathComponent("macroot")
@@ -49,6 +50,7 @@ struct maciOSApp: App {
 
                     // Initialize hooks
                     setup_libsystem_hooks()
+                    setup_foundation_hooks()
 
                     init_bypassDyldLibValidation()
                 }

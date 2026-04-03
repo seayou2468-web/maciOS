@@ -10,3 +10,4 @@
 #import "../Hooks/litehook/litehook.h"
 
 void setup_libsystem_hooks(void);
+void setup_foundation_hooks(void);
