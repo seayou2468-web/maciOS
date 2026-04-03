@@ -8,8 +8,6 @@ class LiveProcess: ObservableObject {
     @Published var isRunning = false
     @Published var output = ""
 
-    private var outputPipe: Pipe?
-
     init(binaryPath: String, arguments: [String] = []) {
         self.binaryPath = binaryPath
         self.arguments = arguments
@@ -20,23 +18,17 @@ class LiveProcess: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
 
-        // In a real LiveProcess implementation (like Nyxian/LiveContainer),
-        // this might involve posix_spawn or custom Mach task creation.
-        // For our non-jailbreak environment, we use managed threads + redirection.
+        // Use NotificationCenter or custom XPC to receive output from AppEx
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("LiveProcessOutput"), object: nil, queue: .main) { [weak self] notification in
+            if let pid = notification.userInfo?["pid"] as? Int, pid == self?.id,
+               let data = notification.userInfo?["data"] as? String {
+                self?.output += data
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-
-            // Setup environment and hooks specific to this process context
-            // Note: In a single-process iOS app, global hooks affect all threads.
-
-            print("[LiveProcess \(self.id)] Starting: \(self.binaryPath)")
-            MachOLoader.loadAndExecute(binaryPath: self.binaryPath, arguments: self.arguments)
-
-            DispatchQueue.main.async {
-                self.isRunning = false
-                print("[LiveProcess \(self.id)] Finished")
+                // Also send to global terminal runner
+                // StdioRunner.shared.newOutputLine = data (if integrated)
             }
         }
+
+        ProcessManager.shared.spawnProcess(binaryPath: binaryPath, arguments: arguments)
     }
 }

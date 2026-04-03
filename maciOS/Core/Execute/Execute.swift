@@ -16,7 +16,6 @@ struct LCMain {
 class MachOLoader {
 
     static func loadAndExecute(binaryPath: String, arguments: [String] = []) {
-        // Ensure hooks are initialized for the process space
         setup_libsystem_hooks()
         setup_foundation_hooks()
         
@@ -25,7 +24,6 @@ class MachOLoader {
             return
         }
         
-        // Dynamically load dependencies using redirected dlopen
         if dlopen(binaryPath, RTLD_NOW | RTLD_GLOBAL) == nil {
             let error = String(cString: dlerror())
             print("dlopen failed: \(error)")
@@ -44,12 +42,9 @@ class MachOLoader {
                 memcpy(buffer, ptr.baseAddress!, size)
             }
             
-            // Apply executable permissions
             vm_protect(mach_task_self(), addr, vm_size_t(size), 0, VM_PROT_READ | VM_PROT_EXEC)
             
             let entry = buffer.advanced(by: Int(entryPoint.entryOffset))
-
-            // Standard C-main signature: int main(int argc, char** argv, char** envp, char** apple)
             typealias MainFunc = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>?, UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>?, UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>?) -> Int32
             let main = unsafeBitCast(entry, to: MainFunc.self)
             
@@ -62,22 +57,28 @@ class MachOLoader {
             }
             cArgs[args.count] = nil
             
-            // Build simple environment pointers (passing through system ones for now)
-            let cEnv = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 1)
-            cEnv[0] = nil
+            // Build real environment pointers
+            let envs = ["HOME=" + (getenv("LC_HOME_PATH").map { String(cString: $0) } ?? ""), "PATH=/usr/bin:/bin", "USER=ios"]
+            let cEnv = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: envs.count + 1)
+            for (i, env) in envs.enumerated() {
+                cEnv[i] = strdup(env)
+            }
+            cEnv[envs.count] = nil
 
-            let cApple = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 1)
-            cApple[0] = nil
+            // Apple stack typically contains the executable path
+            let cApple = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 2)
+            cApple[0] = strdup(binaryPath)
+            cApple[1] = nil
 
             print("Executing binary at: \(entry)")
             let _ = main(Int32(args.count), cArgs, cEnv, cApple)
             
             // Cleanup
-            for i in 0..<args.count {
-                free(cArgs[i])
-            }
+            for i in 0..<args.count { free(cArgs[i]) }
             cArgs.deallocate()
+            for i in 0..<envs.count { free(cEnv[i]) }
             cEnv.deallocate()
+            free(cApple[0])
             cApple.deallocate()
         }
     }
@@ -85,21 +86,16 @@ class MachOLoader {
     static func getARM64EntryPoint(from path: String) -> LCMain? {
         let CPU_ARM64: Int32 = 0x0100000C
         let LC_MAIN: UInt32 = 0x80000028
-        
         guard let file = fopen(path, "rb") else { return nil }
         defer { fclose(file) }
-        
         var header = mach_header_64()
         fread(&header, MemoryLayout<mach_header_64>.size, 1, file)
-        
         if header.magic != MH_MAGIC_64 { return nil }
-        
         var currentOffset = MemoryLayout<mach_header_64>.size
         for _ in 0..<header.ncmds {
             fseek(file, currentOffset, SEEK_SET)
             var cmd = load_command()
             fread(&cmd, MemoryLayout<load_command>.size, 1, file)
-            
             if cmd.cmd == LC_MAIN {
                 fseek(file, currentOffset, SEEK_SET)
                 var ep = entry_point_command()
