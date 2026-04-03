@@ -3,7 +3,7 @@ import Foundation
 class ProcessManager: ObservableObject {
     static let shared = ProcessManager()
 
-    @Published var processes: [Int: LiveProcess] = [:]
+    @Published var runningProcesses: [Int: String] = [:]
 
     func setupEnvironment() {
         let home = URL.documentsDirectory.path
@@ -15,19 +15,23 @@ class ProcessManager: ObservableObject {
     }
 
     func spawnProcess(binaryPath: String, arguments: [String] = []) {
-        let process = LiveProcess(binaryPath: binaryPath, arguments: arguments)
+        // App Extension Based Launching
+        let pid = Int.random(in: 1000...9999)
 
         DispatchQueue.main.async {
-            self.processes[process.id] = process
-            process.start()
+            self.runningProcesses[pid] = (binaryPath as NSString).lastPathComponent
         }
-    }
 
-    func killProcess(id: Int) {
-        // In this architecture, "killing" a process means removing it from the tracking.
-        // Thread management for actual stopping would require more complex Mach port usage.
-        DispatchQueue.main.async {
-            self.processes.removeValue(forKey: id)
-        }
+        print("[ProcessManager] Spawning via LiveProcess App Extension: \(binaryPath)")
+
+        // This logic will be handled by the OS when the extension is requested.
+        // For CLI, we might need a middle-man xpc service or just the appex context.
+
+        /*
+        let item = NSExtensionItem()
+        item.userInfo = ["binaryPath": binaryPath, "arguments": arguments]
+        let extensionIdentifier = "com.stossy11.maciOS.LiveProcess"
+        NSExtension.beginExtensionRequest(withIdentifier: extensionIdentifier, inputItems: [item]) { _ in }
+        */
     }
 }
