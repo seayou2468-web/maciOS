@@ -3,7 +3,7 @@ import Foundation
 class ProcessManager: ObservableObject {
     static let shared = ProcessManager()
 
-    @Published var runningProcesses: [Int: String] = [:]
+    @Published var processes: [Int: LiveProcess] = [:]
 
     func setupEnvironment() {
         let home = URL.documentsDirectory.path
@@ -14,20 +14,20 @@ class ProcessManager: ObservableObject {
         setenv("DYLD_LIBRARY_PATH", (home as NSString).appendingPathComponent("macroot/usr/lib"), 1)
     }
 
-    func spawnTask(binaryPath: String, arguments: [String] = []) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            print("Spawning virtual task: \(binaryPath)")
-            let pid = Int.random(in: 1000...9999)
+    func spawnProcess(binaryPath: String, arguments: [String] = []) {
+        let process = LiveProcess(binaryPath: binaryPath, arguments: arguments)
 
-            DispatchQueue.main.async {
-                self.runningProcesses[pid] = (binaryPath as NSString).lastPathComponent
-            }
+        DispatchQueue.main.async {
+            self.processes[process.id] = process
+            process.start()
+        }
+    }
 
-            MachOLoader.loadAndExecute(binaryPath: binaryPath, arguments: arguments)
-
-            DispatchQueue.main.async {
-                self.runningProcesses.removeValue(forKey: pid)
-            }
+    func killProcess(id: Int) {
+        // In this architecture, "killing" a process means removing it from the tracking.
+        // Thread management for actual stopping would require more complex Mach port usage.
+        DispatchQueue.main.async {
+            self.processes.removeValue(forKey: id)
         }
     }
 }

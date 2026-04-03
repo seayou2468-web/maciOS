@@ -16,14 +16,16 @@ struct LCMain {
 class MachOLoader {
 
     static func loadAndExecute(binaryPath: String, arguments: [String] = []) {
+        // Ensure hooks are initialized for the process space
         setup_libsystem_hooks()
+        setup_foundation_hooks()
         
         guard let entryPoint = getARM64EntryPoint(from: binaryPath) else {
             print("Could not find ARM64 entry point")
             return
         }
         
-        // Use dlopen for recursive dependency resolution (the pseudo-FS redirection is handled by hooks)
+        // Dynamically load dependencies using redirected dlopen
         if dlopen(binaryPath, RTLD_NOW | RTLD_GLOBAL) == nil {
             let error = String(cString: dlerror())
             print("dlopen failed: \(error)")
@@ -42,10 +44,13 @@ class MachOLoader {
                 memcpy(buffer, ptr.baseAddress!, size)
             }
             
+            // Apply executable permissions
             vm_protect(mach_task_self(), addr, vm_size_t(size), 0, VM_PROT_READ | VM_PROT_EXEC)
             
             let entry = buffer.advanced(by: Int(entryPoint.entryOffset))
-            typealias MainFunc = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>?) -> Int32
+
+            // Standard C-main signature: int main(int argc, char** argv, char** envp, char** apple)
+            typealias MainFunc = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>?, UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>?, UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>?) -> Int32
             let main = unsafeBitCast(entry, to: MainFunc.self)
             
             var args = arguments
@@ -57,13 +62,23 @@ class MachOLoader {
             }
             cArgs[args.count] = nil
             
+            // Build simple environment pointers (passing through system ones for now)
+            let cEnv = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 1)
+            cEnv[0] = nil
+
+            let cApple = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 1)
+            cApple[0] = nil
+
             print("Executing binary at: \(entry)")
-            let _ = main(Int32(args.count), cArgs)
+            let _ = main(Int32(args.count), cArgs, cEnv, cApple)
             
+            // Cleanup
             for i in 0..<args.count {
                 free(cArgs[i])
             }
             cArgs.deallocate()
+            cEnv.deallocate()
+            cApple.deallocate()
         }
     }
 
