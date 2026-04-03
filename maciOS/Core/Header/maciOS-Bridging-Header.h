@@ -7,3 +7,6 @@
 #import "../../../AppKit/AppKit/NSWindow.h"
 #import "../../../AppKit/AppKit/NSEvent.h"
 #import "../../../AppKit/AppKit/NSWindowController.h"
+#import "../Hooks/litehook/litehook.h"
+
+void setup_libsystem_hooks(void);
