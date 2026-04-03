@@ -23,9 +23,11 @@ class MachOLoader {
             return
         }
         
-        // In a full implementation, we'd iterate over LC_LOAD_DYLIB here
-        // and recursively load dependencies using dlopen or a custom loader.
-        // For simple apps, we rely on the fact that libSystem is already mapped.
+        // Use dlopen for recursive dependency resolution (the pseudo-FS redirection is handled by hooks)
+        if dlopen(binaryPath, RTLD_NOW | RTLD_GLOBAL) == nil {
+            let error = String(cString: dlerror())
+            print("dlopen failed: \(error)")
+        }
         
         let fileData = try? Data(contentsOf: URL(fileURLWithPath: binaryPath))
         guard let data = fileData else { return }
@@ -39,8 +41,6 @@ class MachOLoader {
             data.withUnsafeBytes { ptr in
                 memcpy(buffer, ptr.baseAddress!, size)
             }
-            
-            // Resolve symbols if necessary (simplified for now)
             
             vm_protect(mach_task_self(), addr, vm_size_t(size), 0, VM_PROT_READ | VM_PROT_EXEC)
             

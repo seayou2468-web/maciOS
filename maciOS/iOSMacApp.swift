@@ -38,11 +38,11 @@ struct maciOSApp: App {
                     }
                 }
                 .onAppear {
-                    setenv("LC_HOME_PATH", getenv("HOME"), 1)
-                    
+                    ProcessManager.shared.setupEnvironment()
+
                     // Setup macroot structure
                     let macroot = URL.documentsDirectory.appendingPathComponent("macroot")
-                    let dirs = ["usr/lib", "bin", "System/Library/Frameworks"]
+                    let dirs = ["usr/lib", "bin", "System/Library/Frameworks", "private/etc", "tmp"]
                     for dir in dirs {
                         try? FileManager.default.createDirectory(at: macroot.appendingPathComponent(dir), withIntermediateDirectories: true)
                     }
