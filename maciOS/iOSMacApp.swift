@@ -13,6 +13,7 @@ import UIKit
 @main
 struct maciOSApp: App {
     @StateObject private var mouse = MouseTracker.shared
+    @StateObject private var processManager = ProcessManager.shared
     @State var cursor = UIImage()
     
     var body: some Scene {
@@ -38,11 +39,20 @@ struct maciOSApp: App {
                     }
                 }
                 .onAppear {
-                    setenv("LC_HOME_PATH", getenv("HOME"), 1)
+                    processManager.setupEnvironment()
+
+                    // Setup macroot structure
+                    let macroot = URL.documentsDirectory.appendingPathComponent("macroot")
+                    let dirs = ["usr/lib", "bin", "System/Library/Frameworks", "private/etc", "tmp"]
+                    for dir in dirs {
+                        try? FileManager.default.createDirectory(at: macroot.appendingPathComponent(dir), withIntermediateDirectories: true)
+                    }
+
+                    // Initialize hooks
+                    setup_libsystem_hooks()
+                    setup_foundation_hooks()
+
                     init_bypassDyldLibValidation()
-                    
-                    let binURL = URL.documentsDirectory.appendingPathComponent("bin")
-                    try? FileManager.default.createDirectory(at: binURL, withIntermediateDirectories: false)
                 }
                 .onAppear {
                     if let window = UIApplication.shared.connectedScenes
@@ -170,5 +180,3 @@ struct NonRetinaScalingModifier: ViewModifier {
 func mach_task_self() -> mach_port_t {
     return mach_task_self_
 }
-
-
